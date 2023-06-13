@@ -9,7 +9,8 @@
     "compile": "npx hardhat compile",
     "test": "npx hardhat test",
     "deploy-main": "npx hardhat run ./scripts/deploy-main.ts",
-    "deploy-721": "npx hardhat run ./scripts/deploy-721.ts",
+    "deploy-mazuki": "npx hardhat run ./scripts/deploy-mazuki.ts",
+    "deploy-mbayc": "npx hardhat run ./scripts/deploy-mbayc.ts",
     "verify": "npx hardhat verify"
   },
   "dependencies": {
