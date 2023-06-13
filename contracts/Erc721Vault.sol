@@ -88,32 +88,32 @@ contract Erc721Vault is Ownable, ReentrancyGuard, ERC721Holder {
     }
   }
 
-  function setStakeInterval(uint32 newValue_) external onlyOwner {
-    stakingInterval = newValue_;
-    emit SetStakeInterval(newValue_);
+  function setStakeInterval(uint32 newValue) external onlyOwner {
+    stakingInterval = newValue;
+    emit SetStakeInterval(newValue);
   }
 
   // O(1)
   function setWhitelistedCol(
-    address col_,
-    uint16 quota_,
-    uint8 weight_
+    address collection,
+    uint16 quota,
+    uint8 weight
   ) external onlyOwner {
     require(
-      quota_ > 0 && weight_ > 0,
+      quota > 0 && weight > 0,
       "quota and weight should be non-zero value"
     );
-    wlCol.colMap[col_] = CollectionConfig(quota_, weight_);
-    EnumerableSet.add(wlCol.colAddrSet, col_);
-    emit SetWhitelistedCollection(col_, quota_, weight_);
+    wlCol.colMap[collection] = CollectionConfig(quota, weight);
+    EnumerableSet.add(wlCol.colAddrSet, collection);
+    emit SetWhitelistedCollection(collection, quota, weight);
   }
 
   // O(1)
-  function delWhitelistedCol(address col_) external onlyOwner {
-    require(EnumerableSet.contains(wlCol.colAddrSet, col_), "not exist");
-    EnumerableSet.remove(wlCol.colAddrSet, col_);
-    delete wlCol.colMap[col_];
-    emit DeleteWhitelistedCollection(col_);
+  function delWhitelistedCol(address collection) external onlyOwner {
+    require(EnumerableSet.contains(wlCol.colAddrSet, collection), "not exist");
+    EnumerableSet.remove(wlCol.colAddrSet, collection);
+    delete wlCol.colMap[collection];
+    emit DeleteWhitelistedCollection(collection);
   }
 
   function getAllWhitelistedCol()
@@ -231,25 +231,25 @@ contract Erc721Vault is Ownable, ReentrancyGuard, ERC721Holder {
   }
 
   function userStakedItems(
-    address addr_
+    address user
   ) public view returns (UserStakedItem[] memory) {
-    return _getUserStakedItems(addr_);
+    return _getUserStakedItems(user);
   }
 
   function stake(
-    address col_,
-    uint256 tokenId_
+    address collection,
+    uint256 tokenId
   ) external nonReentrant stakingOpened {
-    require(_isValidErc721Contract(col_), "not a valid erc-721 address");
-    uint32 maxQuota = wlCol.colMap[col_].maxQuota;
+    require(_isValidErc721Contract(collection), "not a valid erc-721 address");
+    uint32 maxQuota = wlCol.colMap[collection].maxQuota;
     require(maxQuota > 0, "not whitelisted");
     require(
-      wlCol.stakingQuotaMap[col_] + 1 <= maxQuota,
+      wlCol.stakingQuotaMap[collection] + 1 <= maxQuota,
       "reach max quota of collection"
     );
-    ERC721(col_).safeTransferFrom(msg.sender, address(this), tokenId_);
-    _postStakeAppendData(msg.sender, col_, tokenId_);
-    emit NFTStaked(msg.sender, col_, tokenId_);
+    ERC721(collection).safeTransferFrom(msg.sender, address(this), tokenId);
+    _postStakeAppendData(msg.sender, collection, tokenId);
+    emit NFTStaked(msg.sender, collection, tokenId);
   }
 
   function _unstakeSafe(
@@ -277,44 +277,46 @@ contract Erc721Vault is Ownable, ReentrancyGuard, ERC721Holder {
     emit NFTUnstaked(staker_, col_, tokenId_);
   }
 
-  function unstake(address col_, uint256 tokenId_) external nonReentrant {
-    _unstakeSafe(msg.sender, col_, tokenId_);
+  function unstake(address collection, uint256 tokenId) external nonReentrant {
+    _unstakeSafe(msg.sender, collection, tokenId);
   }
 
-  function userScore(address addr_) external view returns (UserScore memory) {
+  function userScore(address user) external view returns (UserScore memory) {
     uint256 itemStakingScores = 0;
-    UserStakedItem[] memory items = userStakedItems(addr_);
+    UserStakedItem[] memory items = userStakedItems(user);
     uint256[] memory tempOut = new uint256[](items.length);
     for (uint256 i = 0; i < items.length; i++) {
       address col = items[i].collection;
       uint256 tokenId = items[i].tokenId;
-      ItemStakingStat memory stat = itemStakingStat(addr_, col, tokenId);
+      ItemStakingStat memory stat = itemStakingStat(user, col, tokenId);
       itemStakingScores += stat.score;
       tempOut[i] = stat.score;
     }
-    return UserScore(block.timestamp, userHistScore[addr_] + itemStakingScores);
+    return UserScore(block.timestamp, userHistScore[user] + itemStakingScores);
   }
 
   function itemStakingStat(
-    address addr_,
-    address col_,
-    uint256 tokenId_
+    address user,
+    address collection,
+    uint256 tokenId
   ) public view returns (ItemStakingStat memory) {
-    uint256 itemTimestamp = userStakingData.timestampMap[addr_][col_][tokenId_];
+    uint256 itemTimestamp = userStakingData.timestampMap[user][collection][
+      tokenId
+    ];
     require(itemTimestamp > 0, "item not exists");
-    if (!EnumerableSet.contains(wlCol.colAddrSet, col_)) {
+    if (!EnumerableSet.contains(wlCol.colAddrSet, collection)) {
       return ItemStakingStat(0, 0);
     }
     uint256 diff = block.timestamp - itemTimestamp;
-    uint256 score = (diff / stakingInterval) * wlCol.colMap[col_].weight;
+    uint256 score = (diff / stakingInterval) * wlCol.colMap[collection].weight;
     return ItemStakingStat(diff, score);
   }
 
   function rescue(
-    address staker_,
-    address col_,
-    uint256 tokenId_
+    address user,
+    address collection,
+    uint256 tokenId
   ) external onlyOwner {
-    _unstakeSafe(staker_, col_, tokenId_);
+    _unstakeSafe(user, collection, tokenId);
   }
 }
