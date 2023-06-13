@@ -443,6 +443,28 @@ describe(CONTRACT_NAME, function () {
       expect(actual[1]).eq(expected);
     });
   });
+  describe("users", () => {
+    beforeEach(async () => {
+      await contractOwnerCalls.toggleStakingAllowed();
+      await contract.setWhitelistedCol(nftContractAddr1, 100, 2);
+      await contract.setWhitelistedCol(nftContractAddr2, 100, 5);
+      expect(await contract.isStakingAllowed()).eq(true);
+    });
+    it("should return valid address (stake/unstake/stake)", async () => {
+      const stake1 = await mintAndStake(user1, nftContract1);
+      expect(await contract.users()).deep.eq([user1.address]);
+      const stake2 = await mintAndStake(user2, nftContract1);
+      expect(await contract.users()).deep.eq([user1.address, user2.address]);
+      const stake3 = await mintAndStake(user1, nftContract1);
+      expect(await contract.users()).deep.eq([user1.address, user2.address]);
+      await contractUser1Calls.unstake(nftContractAddr1, stake3.tokenId);
+      expect(await contract.users()).deep.eq([user1.address, user2.address]);
+      await contractUser2Calls.unstake(nftContractAddr1, stake2.tokenId);
+      expect(await contract.users()).deep.eq([user1.address]);
+      await contractUser1Calls.unstake(nftContractAddr1, stake1.tokenId);
+      expect(await contract.users()).deep.eq([]);
+    });
+  });
   describe("userScore", () => {
     const weights = [39, 9];
     const intervals = [123, 456, 789];
