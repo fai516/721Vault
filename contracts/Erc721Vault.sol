@@ -12,7 +12,7 @@ import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 // import "@openzeppelin/contracts/access/AccessControl.sol";
 
 struct CollectionConfig {
-  uint16 maxQuota;
+  uint32 maxQuota;
   uint8 weight;
 }
 struct WhitelistedCollection {
@@ -119,11 +119,11 @@ contract Erc721Vault is Ownable, ReentrancyGuard, ERC721Holder {
   function getAllWhitelistedCol()
     external
     view
-    returns (address[] memory, uint16[] memory, uint8[] memory)
+    returns (address[] memory, uint32[] memory, uint8[] memory)
   {
     uint256 size = EnumerableSet.length(wlCol.colAddrSet);
     address[] memory addrOut = new address[](size);
-    uint16[] memory quotaOut = new uint16[](size);
+    uint32[] memory quotaOut = new uint32[](size);
     uint8[] memory weightOut = new uint8[](size);
     for (uint256 i = 0; i < size; i++) {
       address addr = EnumerableSet.at(wlCol.colAddrSet, i);
@@ -232,7 +232,7 @@ contract Erc721Vault is Ownable, ReentrancyGuard, ERC721Holder {
     uint256 tokenId_
   ) external nonReentrant stakingOpened {
     require(_isValidErc721Contract(col_), "not a valid erc-721 address");
-    uint16 maxQuota = wlCol.colMap[col_].maxQuota;
+    uint32 maxQuota = wlCol.colMap[col_].maxQuota;
     require(maxQuota > 0, "not whitelisted");
     require(
       wlCol.stakingQuotaMap[col_] + 1 <= maxQuota,
@@ -243,7 +243,11 @@ contract Erc721Vault is Ownable, ReentrancyGuard, ERC721Holder {
     emit NFTStaked(msg.sender, col_, tokenId_);
   }
 
-  function _unstakeSafe(address staker_, address col_, uint256 tokenId_) internal {
+  function _unstakeSafe(
+    address staker_,
+    address col_,
+    uint256 tokenId_
+  ) internal {
     // 1. Check userStakingData
     uint256 itemTimestamp = userStakingData.timestampMap[staker_][col_][
       tokenId_
