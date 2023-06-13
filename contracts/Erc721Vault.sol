@@ -221,6 +221,15 @@ contract Erc721Vault is Ownable, ReentrancyGuard, ERC721Holder {
     userStakingData.staked[staker_] -= 1;
   }
 
+  function users() external view returns (address[] memory) {
+    uint256 length = EnumerableSet.length(userStakingData.addrSet);
+    address[] memory out = new address[](length);
+    for (uint256 i = 0; i < length; i++) {
+      out[i] = EnumerableSet.at(userStakingData.addrSet, i);
+    }
+    return out;
+  }
+
   function userStakedItems(
     address addr_
   ) public view returns (UserStakedItem[] memory) {
