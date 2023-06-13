@@ -214,7 +214,7 @@ contract Erc721Vault is Ownable, ReentrancyGuard, ERC721Holder {
     }
     if (EnumerableSet.length(userStakingData.addrToColIndexing[staker_]) < 1) {
       delete userStakingData.addrToColIndexing[staker_];
-      EnumerableSet.remove(userStakingData.addrSet, col_);
+      EnumerableSet.remove(userStakingData.addrSet, staker_);
     }
     wlCol.stakingQuotaMap[col_] -= 1;
     holding -= 1;
@@ -222,9 +222,9 @@ contract Erc721Vault is Ownable, ReentrancyGuard, ERC721Holder {
   }
 
   function users() external view returns (address[] memory) {
-    uint256 length = EnumerableSet.length(userStakingData.addrSet);
-    address[] memory out = new address[](length);
-    for (uint256 i = 0; i < length; i++) {
+    uint256 len = EnumerableSet.length(userStakingData.addrSet);
+    address[] memory out = new address[](len);
+    for (uint256 i = 0; i < len; i++) {
       out[i] = EnumerableSet.at(userStakingData.addrSet, i);
     }
     return out;
