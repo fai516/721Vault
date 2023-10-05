@@ -249,6 +249,7 @@ describe(CONTRACT_NAME, function () {
       });
     });
   });
+  // More Clear Test
   describe("stake", () => {
     describe("pre-checks", () => {
       it("should revert when staking is closed", async () => {
@@ -336,6 +337,7 @@ describe(CONTRACT_NAME, function () {
       });
     });
   });
+  // More Clear Test
   describe.skip("unstake", () => {
     const weights = [5, 1];
     beforeEach(async () => {
@@ -375,6 +377,7 @@ describe(CONTRACT_NAME, function () {
       });
     });
   });
+  // More Clear Test
   describe("userStakedItems", () => {
     beforeEach(async () => {
       await contractOwnerCalls.toggleStakingAllowed();
@@ -425,6 +428,7 @@ describe(CONTRACT_NAME, function () {
       ]);
     });
   });
+  // More Clear Test
   describe("itemStakingStat", () => {
     const weight = 39;
     beforeEach(async () => {
@@ -465,6 +469,7 @@ describe(CONTRACT_NAME, function () {
       expect(actual[1]).eq(expected);
     });
   });
+  // More Clear Test
   describe.skip("users", () => {
     beforeEach(async () => {
       await contractOwnerCalls.toggleStakingAllowed();
@@ -487,6 +492,7 @@ describe(CONTRACT_NAME, function () {
       expect(await contract.users()).deep.eq([]);
     });
   });
+  // More Clear Test
   describe.skip("userScore", () => {
     const weights = [39, 9];
     const intervals = [123, 456, 789];
@@ -547,6 +553,7 @@ describe(CONTRACT_NAME, function () {
       expect(actual[1]).eq(expectedScore + histScore);
     });
   });
+  // More Clear Test
   describe.skip("rescue", () => {
     const weights = [5, 9];
     beforeEach(async () => {
@@ -582,6 +589,7 @@ describe(CONTRACT_NAME, function () {
       expect((await contract.userScore(user1.address))[1]).eq(expectedScore);
     });
   });
+  // More Clear Test
   describe.skip("intergration test", () => {
     const weights = [51, 39];
     const random = (from: number, to: number) =>

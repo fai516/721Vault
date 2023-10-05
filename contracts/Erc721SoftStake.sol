@@ -18,10 +18,10 @@ struct CollectionConfig {
 struct WhitelistedCollection {
   EnumerableSet.AddressSet colAddrSet;
   mapping(address => CollectionConfig) colMap;
-  mapping(address => uint16) stakingQuotaMap;
+  mapping(address => uint16) stakedQuotaMap;
 }
 
-struct UserStakingData {
+struct UserStakedData {
   mapping(address => uint256) staked;
   EnumerableSet.AddressSet addrSet;
   mapping(address => EnumerableSet.AddressSet) addrToColIndexing;
@@ -35,7 +35,7 @@ struct UserStakedItem {
   uint256 startAt;
 }
 
-struct ItemStakingStat {
+struct StakedItemScore {
   uint256 elapsed;
   uint256 score;
 }
@@ -54,7 +54,7 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
   uint32 public stakingInterval;
   uint256 public holding;
   WhitelistedCollection internal wlCol;
-  UserStakingData internal userStakingData;
+  UserStakedData internal userStakedData;
   mapping(address => uint256) internal userHistScore;
 
   event StakingOpen();
@@ -158,28 +158,28 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
     address col_,
     uint256 tokenId_
   ) internal view returns (uint256) {
-    uint256 itemTimestamp = userStakingData.timestampMap[addr_][col_][tokenId_];
+    uint256 itemTimestamp = userStakedData.timestampMap[addr_][col_][tokenId_];
     return itemTimestamp;
   }
 
   function _getUserStakedItems(
     address addr_
   ) internal view returns (UserStakedItem[] memory) {
-    uint256 userStaked = userStakingData.staked[addr_];
+    uint256 userStaked = userStakedData.staked[addr_];
     uint256 pointer = 0;
     UserStakedItem[] memory items = new UserStakedItem[](userStaked);
-    EnumerableSet.AddressSet storage colSet = userStakingData.addrToColIndexing[
+    EnumerableSet.AddressSet storage colSet = userStakedData.addrToColIndexing[
       addr_
     ];
     uint256 colSetLength = EnumerableSet.length(colSet);
     for (uint256 i = 0; i < colSetLength; i++) {
       address col = EnumerableSet.at(colSet, i);
-      EnumerableSet.UintSet storage tokenIdSet = userStakingData
+      EnumerableSet.UintSet storage tokenIdSet = userStakedData
         .colToTokenIdIndexing[addr_][col];
       uint256 tokenIdSetLength = EnumerableSet.length(tokenIdSet);
       for (uint256 j = 0; j < tokenIdSetLength; j++) {
         uint256 tokenId = EnumerableSet.at(tokenIdSet, j);
-        uint256 timestamp = userStakingData.timestampMap[addr_][col][tokenId];
+        uint256 timestamp = userStakedData.timestampMap[addr_][col][tokenId];
         items[pointer++] = UserStakedItem(col, tokenId, timestamp);
       }
     }
@@ -191,16 +191,16 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
     address col_,
     uint256 tokenId_
   ) internal {
-    EnumerableSet.add(userStakingData.addrSet, staker_);
-    EnumerableSet.add(userStakingData.addrToColIndexing[staker_], col_);
+    EnumerableSet.add(userStakedData.addrSet, staker_);
+    EnumerableSet.add(userStakedData.addrToColIndexing[staker_], col_);
     EnumerableSet.add(
-      userStakingData.colToTokenIdIndexing[staker_][col_],
+      userStakedData.colToTokenIdIndexing[staker_][col_],
       tokenId_
     );
-    userStakingData.timestampMap[staker_][col_][tokenId_] = block.timestamp;
-    wlCol.stakingQuotaMap[col_] += 1;
+    userStakedData.timestampMap[staker_][col_][tokenId_] = block.timestamp;
+    wlCol.stakedQuotaMap[col_] += 1;
     holding += 1;
-    userStakingData.staked[staker_] += 1;
+    userStakedData.staked[staker_] += 1;
   }
 
   function _removeStakedData(
@@ -208,32 +208,32 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
     address col_,
     uint256 tokenId_
   ) internal {
-    delete userStakingData.timestampMap[staker_][col_][tokenId_];
+    delete userStakedData.timestampMap[staker_][col_][tokenId_];
     EnumerableSet.remove(
-      userStakingData.colToTokenIdIndexing[staker_][col_],
+      userStakedData.colToTokenIdIndexing[staker_][col_],
       tokenId_
     );
     if (
       EnumerableSet.length(
-        userStakingData.colToTokenIdIndexing[staker_][col_]
+        userStakedData.colToTokenIdIndexing[staker_][col_]
       ) < 1
     ) {
-      EnumerableSet.remove(userStakingData.addrToColIndexing[staker_], col_);
+      EnumerableSet.remove(userStakedData.addrToColIndexing[staker_], col_);
     }
-    if (EnumerableSet.length(userStakingData.addrToColIndexing[staker_]) < 1) {
-      delete userStakingData.addrToColIndexing[staker_];
-      EnumerableSet.remove(userStakingData.addrSet, staker_);
+    if (EnumerableSet.length(userStakedData.addrToColIndexing[staker_]) < 1) {
+      delete userStakedData.addrToColIndexing[staker_];
+      EnumerableSet.remove(userStakedData.addrSet, staker_);
     }
-    wlCol.stakingQuotaMap[col_] -= 1;
+    wlCol.stakedQuotaMap[col_] -= 1;
     holding -= 1;
-    userStakingData.staked[staker_] -= 1;
+    userStakedData.staked[staker_] -= 1;
   }
 
   function users() external view returns (address[] memory) {
-    uint256 len = EnumerableSet.length(userStakingData.addrSet);
+    uint256 len = EnumerableSet.length(userStakedData.addrSet);
     address[] memory out = new address[](len);
     for (uint256 i = 0; i < len; i++) {
-      out[i] = EnumerableSet.at(userStakingData.addrSet, i);
+      out[i] = EnumerableSet.at(userStakedData.addrSet, i);
     }
     return out;
   }
@@ -261,7 +261,7 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
     uint32 maxQuota = wlCol.colMap[collection].maxQuota;
     require(maxQuota > 0, "not whitelisted");
     require(
-      wlCol.stakingQuotaMap[collection] + 1 <= maxQuota,
+      wlCol.stakedQuotaMap[collection] + 1 <= maxQuota,
       "reach max quota of collection"
     );
     require(_isOwner(msg.sender, collection, tokenId), "not a owner");
@@ -277,7 +277,7 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
     address col_,
     uint256 tokenId_
   ) external nonReentrant stakingOpened {
-    uint256 itemTimestamp = userStakingData.timestampMap[msg.sender][col_][
+    uint256 itemTimestamp = userStakedData.timestampMap[msg.sender][col_][
       tokenId_
     ];
     require(itemTimestamp > 0, "item not exists");
@@ -286,7 +286,7 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
     // uint32 maxQuota = wlCol.colMap[collection].maxQuota;
     // require(maxQuota > 0, "not whitelisted");
     // require(
-    //   wlCol.stakingQuotaMap[collection] + 1 <= maxQuota,
+    //   wlCol.stakedQuotaMap[collection] + 1 <= maxQuota,
     //   "reach max quota of collection"
     // );
     // require(_isOwner(msg.sender, collection, tokenId), "not a owner");
@@ -301,8 +301,8 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
     address col_,
     uint256 tokenId_
   ) internal {
-    // 1. Check userStakingData
-    uint256 itemTimestamp = userStakingData.timestampMap[staker_][col_][
+    // 1. Check userStakedData
+    uint256 itemTimestamp = userStakedData.timestampMap[staker_][col_][
       tokenId_
     ];
     require(itemTimestamp > 0, "item not exists");
@@ -311,7 +311,7 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
       "vault not the owner"
     );
     // 2. calculate score
-    ItemStakingStat memory stat = itemStakingStat(staker_, col_, tokenId_);
+    StakedItemScore memory stat = itemStakingStat(staker_, col_, tokenId_);
     // 3. safeTransferFrom (transfer Nft to msg.sender)
     ERC721(col_).safeTransferFrom(address(this), staker_, tokenId_);
     // 4. Remove data
@@ -332,28 +332,29 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
     for (uint256 i = 0; i < items.length; i++) {
       address col = items[i].collection;
       uint256 tokenId = items[i].tokenId;
-      ItemStakingStat memory stat = itemStakingStat(user, col, tokenId);
+      StakedItemScore memory stat = itemStakingStat(user, col, tokenId);
       itemStakingScores += stat.score;
       tempOut[i] = stat.score;
     }
     return UserScore(block.timestamp, userHistScore[user] + itemStakingScores);
   }
 
+  // function _calculateCurrentStakedScore() {}
   function itemStakingStat(
     address user,
     address collection,
     uint256 tokenId
-  ) public view returns (ItemStakingStat memory) {
-    uint256 itemTimestamp = userStakingData.timestampMap[user][collection][
+  ) public view returns (StakedItemScore memory) {
+    uint256 itemTimestamp = userStakedData.timestampMap[user][collection][
       tokenId
     ];
     require(itemTimestamp > 0, "item not exists");
     if (!EnumerableSet.contains(wlCol.colAddrSet, collection)) {
-      return ItemStakingStat(0, 0);
+      return StakedItemScore(0, 0);
     } 
     uint256 diff = block.timestamp - itemTimestamp;
     uint256 score = (diff / stakingInterval) * wlCol.colMap[collection].weight;
-    return ItemStakingStat(diff, score);
+    return StakedItemScore(diff, score);
   }
 
   function rescue(
