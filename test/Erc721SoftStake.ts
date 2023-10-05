@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { deployContract } from "./helper";
-import { Erc721Vault } from "../typechain-types/contracts";
+import { Erc721SoftStake } from "../typechain-types/contracts";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import {
@@ -10,15 +10,15 @@ import {
   Mock20
 } from "../typechain-types/contracts/example";
 
-const CONTRACT_NAME = "Erc721Vault";
-type ContractType = Erc721Vault;
+const CONTRACT_NAME = "Erc721SoftStake";
+type ContractType = Erc721SoftStake;
 
 interface IMintAndStakeReturned {
   tokenId: bigint;
   timestamp: number;
 }
 
-describe.skip(CONTRACT_NAME, function () {
+describe(CONTRACT_NAME, function () {
   const stakingInterval = 5;
   let contract: ContractType;
   let contractAddr: string;
@@ -127,6 +127,24 @@ describe.skip(CONTRACT_NAME, function () {
           contract,
           "StakingClose"
         );
+      });
+    });
+  });
+  describe("setMaxStakedDay", () => {
+    const maxDay = 7;
+    describe("when caller is not the owner", async () => {
+      it("should revert", async () => {
+        await expect(
+          contractUser1Calls.setMaxStakedDay(maxDay)
+        ).revertedWith(notAOwnerErrMsg);
+      });
+    });
+    describe("when caller is owner", () => {
+      it("should set maxStakedDay and emit a event", async () => {
+        await expect(contractOwnerCalls.setMaxStakedDay(maxDay))
+          .emit(contract, "SetMaxStakedDay")
+          .withArgs(maxDay);
+        expect(await contract.maxStakedDay());
       });
     });
   });
@@ -277,6 +295,7 @@ describe.skip(CONTRACT_NAME, function () {
         const id2 = await mintAndApprove(user1, nftContract1);
         // Stake 1 Nft into vault
         await contractUser1Calls.stake(nftContractAddr1, id1);
+
         await expect(
           contractUser1Calls.stake(nftContractAddr1, id2)
         ).revertedWith("reach max quota of collection");
@@ -287,7 +306,7 @@ describe.skip(CONTRACT_NAME, function () {
         await mintAndApprove(user2, nftContract1);
         await expect(
           contractUser1Calls.stake(nftContractAddr1, 0)
-        ).revertedWith("ERC721: transfer from incorrect owner");
+        ).revertedWith("not a owner");
       });
     });
     describe("passed pre-checks", () => {
@@ -305,19 +324,19 @@ describe.skip(CONTRACT_NAME, function () {
         await expect(contract.connect(user1).stake(nftContractAddr1, id1))
           .emit(contract, "NFTStaked")
           .withArgs(user1.address, nftContractAddr1, id1);
-        expect(await nftContract1.ownerOf(id1)).eq(await contract.getAddress());
+        expect(await nftContract1.ownerOf(id1)).eq(user1.address);
         await expect(contract.connect(user1).stake(nftContractAddr1, id2))
           .emit(contract, "NFTStaked")
           .withArgs(user1.address, nftContractAddr1, id2);
-        expect(await nftContract1.ownerOf(id2)).eq(await contract.getAddress());
+        expect(await nftContract1.ownerOf(id2)).eq(user1.address);
         await expect(contract.connect(user1).stake(nftContractAddr2, id3))
           .emit(contract, "NFTStaked")
           .withArgs(user1.address, nftContractAddr2, id3);
-        expect(await nftContract2.ownerOf(id3)).eq(await contract.getAddress());
+        expect(await nftContract2.ownerOf(id3)).eq(user1.address);
       });
     });
   });
-  describe("unstake", () => {
+  describe.skip("unstake", () => {
     const weights = [5, 1];
     beforeEach(async () => {
       await contractOwnerCalls.toggleStakingAllowed();
@@ -446,7 +465,7 @@ describe.skip(CONTRACT_NAME, function () {
       expect(actual[1]).eq(expected);
     });
   });
-  describe("users", () => {
+  describe.skip("users", () => {
     beforeEach(async () => {
       await contractOwnerCalls.toggleStakingAllowed();
       await contract.setWhitelistedCol(nftContractAddr1, 100, 2);
@@ -468,7 +487,7 @@ describe.skip(CONTRACT_NAME, function () {
       expect(await contract.users()).deep.eq([]);
     });
   });
-  describe("userScore", () => {
+  describe.skip("userScore", () => {
     const weights = [39, 9];
     const intervals = [123, 456, 789];
     const mintAndStakeForWhile = async (): Promise<
@@ -528,7 +547,7 @@ describe.skip(CONTRACT_NAME, function () {
       expect(actual[1]).eq(expectedScore + histScore);
     });
   });
-  describe("rescue", () => {
+  describe.skip("rescue", () => {
     const weights = [5, 9];
     beforeEach(async () => {
       await contractOwnerCalls.toggleStakingAllowed();
@@ -563,7 +582,7 @@ describe.skip(CONTRACT_NAME, function () {
       expect((await contract.userScore(user1.address))[1]).eq(expectedScore);
     });
   });
-  describe("intergration test", () => {
+  describe.skip("intergration test", () => {
     const weights = [51, 39];
     const random = (from: number, to: number) =>
       Math.floor((to - from) * Math.random()) + from;
@@ -606,4 +625,17 @@ describe.skip(CONTRACT_NAME, function () {
       expect((await contract.userScore(user1.address))[1]).eq(histScore);
     });
   });
+  // describe.only("gas", () => {
+  //   it("gas", async () => {
+  //     await contractOwnerCalls.toggleStakingAllowed();
+  //     await contract.setWhitelistedCol(nftContractAddr1, 100, 5);
+  //     await contract.setWhitelistedCol(nftContractAddr2, 100, 1);
+  //     expect(await contract.isStakingAllowed()).eq(true);
+
+  //     const id1 = await mintAndApprove(user1, nftContract1);
+  //     await expect(contract.connect(user1).stake(nftContractAddr1, id1))
+  //       .emit(contract, "NFTStaked")
+  //       .withArgs(user1.address, nftContractAddr1, id1);
+  //   });
+  // });
 });

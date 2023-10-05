@@ -11,7 +11,8 @@
     "deploy-main": "npx hardhat run ./scripts/deploy-main.ts",
     "deploy-mazuki": "npx hardhat run ./scripts/deploy-mazuki.ts",
     "deploy-mbayc": "npx hardhat run ./scripts/deploy-mbayc.ts",
-    "verify": "npx hardhat verify"
+    "verify": "npx hardhat verify",
+    "gas": "REPORT_GAS=true yarn test"
   },
   "dependencies": {
     "@openzeppelin/contracts": "4.9.1",
@@ -30,7 +31,7 @@
     "@types/node": ">=12.0.0",
     "chai": "4.2.0",
     "ethers": "6.4.0",
-    "hardhat-gas-reporter": "1.0.8",
+    "hardhat-gas-reporter": "^1.0.9",
     "solidity-coverage": "0.8.0",
     "ts-node": ">=8.0.0",
     "typechain": "8.1.0",
