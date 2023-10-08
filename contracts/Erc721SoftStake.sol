@@ -100,6 +100,7 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
     setStakeInterval(interval_);
     setMaxStakedDay(maxStakedDay_);
   }
+
   // constructor(uint32 interval_, uint16 maxStakedDay_) {
   //   isStakingAllowed = false;
   //   stakingInterval = interval_;
@@ -297,33 +298,40 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
   }
 
   function stake(
-    address collection,
-    uint256 tokenId
+    address[] memory collections,
+    uint256[] memory tokenIds
   ) external nonReentrant stakingOpened {
-    require(_isValidErc721Contract(collection), "not a valid erc-721 address");
-    uint32 maxQuota = wlCol.colMap[collection].maxQuota;
+    uint256 len = collections.length;
+    for (uint256 i = 0; i < len; i++) {
+      _stakeSafe(collections[i], tokenIds[i]);
+    }
+  }
+
+  function _stakeSafe(address col_, uint256 id_) internal {
+    require(_isValidErc721Contract(col_), "not a valid erc-721 address");
+    uint32 maxQuota = wlCol.colMap[col_].maxQuota;
     require(maxQuota > 0, "not whitelisted");
     require(
-      wlCol.stakedMap[collection] + 1 <= maxQuota,
+      wlCol.stakedMap[col_] + 1 <= maxQuota,
       "reach max quota of collection"
     );
-    require(_isOnchainOwner(msg.sender, collection, tokenId), "not a owner");
-    address localOwner = ownership[collection][tokenId];
+    require(_isOnchainOwner(msg.sender, col_, id_), "not a owner");
+    address localOwner = ownership[col_][id_];
     if (localOwner != address(0)) {
       if (localOwner != msg.sender) {
-        _removeStakedData(localOwner, collection, tokenId);
+        _removeStakedData(localOwner, col_, id_);
       } else {
         revert("use check-in");
       }
     }
     // ERC721(collection).safeTransferFrom(msg.sender, address(this), tokenId);
-    _createStakedData(msg.sender, collection, tokenId);
-    ownership[collection][tokenId] = msg.sender;
+    _createStakedData(msg.sender, col_, id_);
+    ownership[col_][id_] = msg.sender;
     emit NFTStaked(
       msg.sender,
-      collection,
-      tokenId,
-      wlCol.colMap[collection].weight,
+      col_,
+      id_,
+      wlCol.colMap[col_].weight,
       block.timestamp
     );
   }
@@ -386,8 +394,14 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
     );
   }
 
-  function unstake(address collection, uint256 tokenId) external nonReentrant {
-    _unstakeSafe(msg.sender, collection, tokenId);
+  function unstake(
+    address[] memory collections,
+    uint256[] memory tokenIds
+  ) external nonReentrant {
+    uint256 len = collections.length;
+    for (uint256 i = 0; i < len; i++) {
+      _unstakeSafe(msg.sender, collections[i], tokenIds[i]);
+    }
   }
 
   function userScore(address user) external view returns (UserScore memory) {
