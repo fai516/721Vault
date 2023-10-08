@@ -96,10 +96,16 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
 
   constructor(uint32 interval_, uint16 maxStakedDay_) {
     isStakingAllowed = false;
+    stakingInterval = interval_;
     setStakeInterval(interval_);
     setMaxStakedDay(maxStakedDay_);
   }
-
+  // constructor(uint32 interval_, uint16 maxStakedDay_) {
+  //   isStakingAllowed = false;
+  //   stakingInterval = interval_;
+  //   setStakeInterval(interval_);
+  //   setMaxStakedDay(maxStakedDay_);
+  // }
   modifier stakingOpened() {
     require(isStakingAllowed, "staking is closed");
     _;
