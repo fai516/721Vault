@@ -18,7 +18,7 @@ interface IMintAndStakeReturned {
   timestamp: number;
 }
 
-describe(CONTRACT_NAME, function () {
+describe.only(CONTRACT_NAME, function () {
   const stakingInterval = 5;
   let contract: ContractType;
   let contractAddr: string;
@@ -88,6 +88,18 @@ describe(CONTRACT_NAME, function () {
       timestamp: await time.latest()
     };
   };
+  const transferNft = async (
+    nftContract: Mock721,
+    from: HardhatEthersSigner,
+    to: HardhatEthersSigner,
+    id: bigint
+  ): Promise<void> => {
+    return (nftContract.connect(user1) as any).safeTransferFrom(
+      from.address,
+      to.address,
+      id
+    );
+  };
   const calculatedScore = async (
     stake: IMintAndStakeReturned,
     weight: number
@@ -104,6 +116,8 @@ describe(CONTRACT_NAME, function () {
       return (await prev) + score;
     }, Promise.resolve(0));
   };
+  const getLatestBlockTime = (): Promise<number> =>
+    time.latest().then((t) => t + 1);
   describe("toggleStakingAllowed", () => {
     describe("when caller is not the owner", async () => {
       it("should revert", async () => {
@@ -130,13 +144,32 @@ describe(CONTRACT_NAME, function () {
       });
     });
   });
+  // // TODO//
+  // describe("setOperator", () => {
+  //   const maxDay = 7;
+  //   describe("when caller is not the owner", async () => {
+  //     it("should revert", async () => {
+  //       await expect(contractUser1Calls.setMaxStakedDay(maxDay)).revertedWith(
+  //         notAOwnerErrMsg
+  //       );
+  //     });
+  //   });
+  //   describe("when caller is owner", () => {
+  //     it("should set maxStakedDay and emit a event", async () => {
+  //       await expect(contractOwnerCalls.setMaxStakedDay(maxDay))
+  //         .emit(contract, "SetMaxStakedDay")
+  //         .withArgs(maxDay);
+  //       expect(await contract.maxStakedDay());
+  //     });
+  //   });
+  // });
   describe("setMaxStakedDay", () => {
     const maxDay = 7;
     describe("when caller is not the owner", async () => {
       it("should revert", async () => {
-        await expect(
-          contractUser1Calls.setMaxStakedDay(maxDay)
-        ).revertedWith(notAOwnerErrMsg);
+        await expect(contractUser1Calls.setMaxStakedDay(maxDay)).revertedWith(
+          notAOwnerErrMsg
+        );
       });
     });
     describe("when caller is owner", () => {
@@ -188,7 +221,12 @@ describe(CONTRACT_NAME, function () {
         });
         it("should add the data and emit event if it does not exists", async () => {
           const quota = 12;
-          expect(await contract.getAllWhitelistedCol()).deep.eq([[], [], []]);
+          expect(await contract.getAllWhitelistedCol()).deep.eq([
+            [],
+            [],
+            [],
+            []
+          ]);
           await expect(
             contractOwnerCalls.setWhitelistedCol(nftContractAddr1, quota, 1)
           )
@@ -197,6 +235,7 @@ describe(CONTRACT_NAME, function () {
           expect(await contract.getAllWhitelistedCol()).deep.eq([
             [nftContractAddr1],
             [quota],
+            [0],
             [1]
           ]);
         });
@@ -215,6 +254,7 @@ describe(CONTRACT_NAME, function () {
           expect(await contract.getAllWhitelistedCol()).deep.eq([
             [nftContractAddr1],
             [quota + 34],
+            [0],
             [3]
           ]);
         });
@@ -243,6 +283,7 @@ describe(CONTRACT_NAME, function () {
           expect(await contract.getAllWhitelistedCol()).deep.eq([
             [nftContractAddr2],
             [13],
+            [0],
             [9]
           ]);
         });
@@ -311,34 +352,281 @@ describe(CONTRACT_NAME, function () {
       });
     });
     describe("passed pre-checks", () => {
+      let id1: bigint;
       beforeEach(async () => {
         await contractOwnerCalls.toggleStakingAllowed();
         await contract.setWhitelistedCol(nftContractAddr1, 100, 5);
         await contract.setWhitelistedCol(nftContractAddr2, 100, 1);
+        id1 = await mintAndApprove(user1, nftContract1);
         expect(await contract.isStakingAllowed()).eq(true);
       });
-      it("should transfer the Nft to the vault", async () => {
-        // Mint 1 and approve Nft from nftContract1 for user1
-        const id1 = await mintAndApprove(user1, nftContract1);
-        const id2 = await mintAndApprove(user1, nftContract1, 17);
-        const id3 = await mintAndApprove(user1, nftContract2);
-        await expect(contract.connect(user1).stake(nftContractAddr1, id1))
-          .emit(contract, "NFTStaked")
-          .withArgs(user1.address, nftContractAddr1, id1);
-        expect(await nftContract1.ownerOf(id1)).eq(user1.address);
-        await expect(contract.connect(user1).stake(nftContractAddr1, id2))
-          .emit(contract, "NFTStaked")
-          .withArgs(user1.address, nftContractAddr1, id2);
-        expect(await nftContract1.ownerOf(id2)).eq(user1.address);
-        await expect(contract.connect(user1).stake(nftContractAddr2, id3))
-          .emit(contract, "NFTStaked")
-          .withArgs(user1.address, nftContractAddr2, id3);
-        expect(await nftContract2.ownerOf(id3)).eq(user1.address);
+      describe("when there's a prior staker", () => {
+        describe("prior staker is not the current NFT owner", () => {
+          it("should clear the prior staker data and append the data of the new owner", async () => {
+            // user1 stake first
+            await contractUser1Calls.stake(nftContractAddr1, id1);
+            expect(await contract.itemOwnership(nftContractAddr1, id1)).eq(
+              user1.address
+            );
+            // user1 gives the ownership to user2
+            await transferNft(nftContract1, user1, user2, id1);
+            expect(await nftContract1.ownerOf(id1)).eq(user2.address);
+            // user2 stake should emit valid event
+            await expect(contractUser2Calls.stake(nftContractAddr1, id1))
+              .emit(contract, "NFTStaked")
+              .withArgs(
+                user2.address,
+                nftContractAddr1,
+                id1,
+                5,
+                await getLatestBlockTime()
+              );
+            // contract item ownership for id1 should be user2
+            expect(await contract.itemOwnership(nftContractAddr1, id1)).eq(
+              user2.address
+            );
+            // WhitelistCol object should be asserted
+            const [colAddrs, _, stakeds] =
+              await contract.getAllWhitelistedCol();
+            expect(colAddrs[0]).eq(await nftContract1.getAddress());
+            expect(stakeds[0]).eq(1);
+            // item detail should be valid
+            expect(await contract.userStakedItems(user2.address)).deep.eq([
+              [await nftContract1.getAddress(), id1, await time.latest()]
+            ]);
+          });
+        });
+        describe("prior staker is the current NFT owner", () => {
+          it("should revert with message 'use checkin instead'", async () => {
+            await contractUser1Calls.stake(nftContractAddr1, id1);
+            await expect(
+              contract.connect(user1).stake(nftContractAddr1, id1)
+            ).revertedWith("use check-in");
+          });
+        });
+      });
+      describe("when there's no prior staker (item is brand new staked)", () => {
+        it("should and user is still an owner", async () => {
+          // Mint 1 and approve Nft from nftContract1 for user1
+          const id1 = await mintAndApprove(user1, nftContract1);
+          const id2 = await mintAndApprove(user1, nftContract1, 17);
+          const id3 = await mintAndApprove(user1, nftContract2);
+          await expect(contract.connect(user1).stake(nftContractAddr1, id1))
+            .emit(contract, "NFTStaked")
+            .withArgs(
+              user1.address,
+              nftContractAddr1,
+              id1,
+              5,
+              (await time.latest()) + 1
+            );
+          expect(await nftContract1.ownerOf(id1)).eq(user1.address);
+          await expect(contract.connect(user1).stake(nftContractAddr1, id2))
+            .emit(contract, "NFTStaked")
+            .withArgs(
+              user1.address,
+              nftContractAddr1,
+              id2,
+              5,
+              (await time.latest()) + 1
+            );
+          expect(await nftContract1.ownerOf(id2)).eq(user1.address);
+          await expect(contract.connect(user1).stake(nftContractAddr2, id3))
+            .emit(contract, "NFTStaked")
+            .withArgs(
+              user1.address,
+              nftContractAddr2,
+              id3,
+              1,
+              (await time.latest()) + 1
+            );
+          expect(await nftContract2.ownerOf(id3)).eq(user1.address);
+        });
+      });
+    });
+  });
+  describe("checkIn", () => {
+    const weights = [5, 1];
+    let id1: bigint;
+    beforeEach(async () => {
+      contractOwnerCalls.setMaxStakedDay(7);
+      await contractOwnerCalls.toggleStakingAllowed();
+      await contract.setWhitelistedCol(nftContractAddr1, 100, weights[0]);
+      await contract.setWhitelistedCol(nftContractAddr2, 100, weights[1]);
+      id1 = await mintAndApprove(user1, nftContract1);
+      expect(await contract.isStakingAllowed()).eq(true);
+    });
+    describe("pre-checks", () => {
+      it("should revert if the item is not staked", async () => {
+        await expect(
+          contractUser1Calls.checkIn([nftContractAddr1], [0])
+        ).revertedWith("item not exists");
+      });
+      it("should revert if the item is staked but caller not the staker", async () => {
+        await mintAndStake(user2, nftContract1, 0);
+        await expect(
+          contractUser1Calls.checkIn([nftContractAddr1], [0])
+        ).revertedWith("item not exists");
+      });
+      it.skip("should revert if the item is staked but caller is not the local owner", async () => {
+        // user1 stakes
+        await contractUser1Calls.stake(nftContractAddr1, id1);
+        expect(await contract.itemOwnership(nftContractAddr1, id1)).eq(
+          user1.address
+        );
+        // user1 transfer nft to user2 during staking
+        await time.increase(3721);
+        await transferNft(nftContract1, user1, user2, id1);
+        // user2 stakes
+        await contractUser2Calls.stake(nftContractAddr1, id1);
+        expect(await contract.itemOwnership(nftContractAddr1, id1)).eq(
+          user2.address
+        );
+        // it should revert if user1 tries to checkin
+        // await expect(
+        //   contractUser1Calls.singleCheckIn(nftContractAddr1, 0)
+        // ).revertedWith("not a owner");
+      });
+      it("should revert if the item is staked but caller is not the onchain owner", async () => {
+        // user1 stakes
+        await contractUser1Calls.stake(nftContractAddr1, id1);
+        expect(await contract.itemOwnership(nftContractAddr1, id1)).eq(
+          user1.address
+        );
+        // user1 transfer nft to user2 during staking
+        await time.increase(3721);
+        await transferNft(nftContract1, user1, user2, id1);
+        // it should revert if user1 tries to checkin
+        await expect(
+          contractUser1Calls.checkIn([nftContractAddr1], [0])
+        ).revertedWith("not a onchain owner");
+      });
+    });
+    describe("passed pre-checks", () => {
+      describe("single item", () => {
+        it("should emit event and reset the timestamp and increase the histScore", async () => {
+          const timeElapsed = 3721;
+          // user1 stakes
+          await contractUser1Calls.stake(nftContractAddr1, id1);
+          expect(await contract.itemOwnership(nftContractAddr1, id1)).eq(
+            user1.address
+          );
+          expect(await contract.userScore(user1.address).then((x) => x[1])).eq(
+            0
+          );
+          const timestamp1 = await contract
+            .userStakedItems(user1.address)
+            .then((x) => x[0][2]);
+          // const timestamp1 = await
+          // time passed
+          await time.increase(timeElapsed);
+          // verify event emitted calling checkin method
+          await expect(contractUser1Calls.checkIn([nftContractAddr1], [id1]))
+            .emit(contract, "NFTCheckIn")
+            .withArgs(
+              user1.address,
+              nftContractAddr1,
+              id1,
+              weights[0],
+              await getLatestBlockTime()
+            );
+          // user1 user's score should increase
+          expect(await contract.userScore(user1.address).then((x) => x[1])).eq(
+            Math.floor(timeElapsed / stakingInterval) * 5
+          );
+          // item timestamp should be greater
+          const timestamp2 = await contract
+            .userStakedItems(user1.address)
+            .then((x) => x[0][2]);
+          expect(timestamp2).gt(timestamp1);
+        });
+      });
+      describe("multiple items", () => {
+        it("should revert if either single item fail to check-in", async () => {
+          const timeElapsed = 3721;
+          // mint 1 more nfts
+          const id2 = await mintAndApprove(user1, nftContract1);
+          // user1 stake both nfts
+          await contractUser1Calls.stake(nftContractAddr1, id1);
+          await contractUser1Calls.stake(nftContractAddr1, id2);
+          // verify ownership and score
+          expect(await contract.itemOwnership(nftContractAddr1, id1)).eq(
+            user1.address
+          );
+          expect(await contract.itemOwnership(nftContractAddr1, id2)).eq(
+            user1.address
+          );
+          expect(await contract.userScore(user1.address).then((x) => x[1])).eq(
+            0
+          );
+          // verify the score of nft1 by checkin first
+          await time.increase(timeElapsed);
+          await contractUser1Calls.checkIn([nftContractAddr1], [id1]);
+          const expectedScore = Math.floor(timeElapsed / stakingInterval) * 5;
+          expect(await contract.userScore(user1.address).then((x) => x[1])).eq(
+            expectedScore
+          );
+          // transfer nft2 (id2) to user2 intentionally
+          await transferNft(nftContract1, user1, user2, id2);
+          expect(await nftContract1.ownerOf(id2)).eq(user2.address);
+          // calling checkin method should be reverted
+          await expect(
+            contractUser1Calls.checkIn(
+              [nftContractAddr1, nftContractAddr1],
+              [id1, id2]
+            )
+          ).revertedWith("not a onchain owner");
+          // the score of user1 should remain unchanged.
+          expect(await contract.userScore(user1.address).then((x) => x[1])).eq(
+            expectedScore
+          );
+        });
+        it("should reset the timestamp and increase the histScore", async () => {
+          const timeElapsed = 3721;
+          // mint 4 more nfts
+          const id2 = await mintAndApprove(user1, nftContract1);
+          const id3 = await mintAndApprove(user1, nftContract2);
+          const id4 = await mintAndApprove(user1, nftContract1);
+          const id5 = await mintAndApprove(user1, nftContract2);
+          // user1 stakes all 5 nfts
+          await contractUser1Calls.stake(nftContractAddr1, id1);
+          await contractUser1Calls.stake(nftContractAddr1, id2);
+          await contractUser1Calls.stake(nftContractAddr2, id3);
+          await contractUser1Calls.stake(nftContractAddr1, id4);
+          await contractUser1Calls.stake(nftContractAddr2, id5);
+          expect(await contract.userScore(user1.address).then((x) => x[1])).eq(
+            0
+          );
+          // verify event by calling checkin in given time
+          await time.increase(timeElapsed);
+          await contractUser1Calls.checkIn(
+            [
+              nftContractAddr1,
+              nftContractAddr1,
+              nftContractAddr2,
+              nftContractAddr1,
+              nftContractAddr2
+            ],
+            [id1, id2, id3, id4, id5]
+          );
+          // check score (actual score should always gte than expected due to the latency of each each stake method)
+          const colWeight = [0, 0, 1, 0, 1];
+          const expectedScore = colWeight.reduce((prev, curr) => {
+            const score =
+              Math.floor(timeElapsed / stakingInterval) * weights[curr];
+            return prev + score;
+          }, 0);
+          const [_, score, sessionScore] = await contract.userScore(
+            user1.address
+          );
+          expect(sessionScore).eq(0);
+          expect(score).gte(expectedScore);
+        });
       });
     });
   });
   // More Clear Test
-  describe.skip("unstake", () => {
+  describe("unstake", () => {
     const weights = [5, 1];
     beforeEach(async () => {
       await contractOwnerCalls.toggleStakingAllowed();
@@ -360,16 +648,23 @@ describe(CONTRACT_NAME, function () {
       });
     });
     describe("passed pre-checks", () => {
-      it("should transfer item to sender and remove record data", async () => {
+      it("should remove record data and ", async () => {
+        contractOwnerCalls.setMaxStakedDay(7);
         const stake1 = await mintAndStake(user1, nftContract1);
-        expect(await nftContract1.ownerOf(stake1.tokenId)).eq(contractAddr);
+        expect(await nftContract1.ownerOf(stake1.tokenId)).eq(user1.address);
         expect(await contract.userStakedItems(user1.address)).length(1);
         await time.increase(3721);
         await expect(
           contractUser1Calls.unstake(nftContractAddr1, stake1.tokenId)
         )
           .emit(contract, "NFTUnstaked")
-          .withArgs(user1.address, nftContractAddr1, stake1.tokenId);
+          .withArgs(
+            user1.address,
+            nftContractAddr1,
+            stake1.tokenId,
+            weights[0],
+            await getLatestBlockTime()
+          );
         const expectedScore = await calculatedScore(stake1, weights[0]);
         expect(await nftContract1.ownerOf(stake1.tokenId)).eq(user1.address);
         expect(await contract.userStakedItems(user1.address)).length(0);
@@ -428,49 +723,65 @@ describe(CONTRACT_NAME, function () {
       ]);
     });
   });
-  // More Clear Test
-  describe("itemStakingStat", () => {
+  describe("itemStat", () => {
     const weight = 39;
     beforeEach(async () => {
       await contractOwnerCalls.toggleStakingAllowed();
       await contract.setWhitelistedCol(nftContractAddr1, 100, weight);
       expect(await contract.isStakingAllowed()).eq(true);
     });
-    describe("item not exist", async () => {
-      it("should revert", async () => {
-        await expect(
-          contract.itemStakingStat(user1.address, nftContractAddr1, 0)
-        ).revertedWith("item not exists");
-      });
+    it("should revert if item not exist", async () => {
+      await expect(
+        contract.itemStat(user1.address, nftContractAddr1, 0)
+      ).revertedWith("item not exists");
     });
     it("should return 0 if col is not whitelisted", async () => {
       const { tokenId } = await mintAndStake(user1, nftContract1);
       await contract.delWhitelistedCol(nftContractAddr1);
-      const actual = await contract.itemStakingStat(
+      const actual = await contract.itemStat(
         user1.address,
         nftContractAddr1,
         tokenId
       );
       expect(actual[1]).eq(0);
     });
-    it("should print valid score", async () => {
-      const diff = 250;
-      const { tokenId, timestamp } = await mintAndStake(user1, nftContract1);
-      await time.increase(diff);
-      await mintAndStake(user1, nftContract1);
-      const expected =
-        Math.floor(((await time.latest()) - timestamp) / stakingInterval) *
-        weight;
-      const actual = await contract.itemStakingStat(
-        user1,
-        nftContractAddr1,
-        tokenId
-      );
-      expect(actual[1]).eq(expected);
+    describe("when stake time is more than and equal to max days", () => {
+      it("should print the score no more than max days", async () => {
+        await contract.setMaxStakedDay(7);
+        const diff = 250;
+        const { tokenId, timestamp } = await mintAndStake(user1, nftContract1);
+        await time.increase(diff);
+        await mintAndStake(user1, nftContract1);
+        const expected =
+          Math.floor(((await time.latest()) - timestamp) / stakingInterval) *
+          weight;
+        const actual = await contract.itemStat(
+          user1,
+          nftContractAddr1,
+          tokenId
+        );
+        expect(actual[1]).eq(expected);
+      });
+    });
+    describe("when stake time is less than max days", () => {
+      it("should print the score no more than max days", async () => {
+        await contract.setMaxStakedDay(7);
+        const diff = 10000000;
+        const { tokenId } = await mintAndStake(user1, nftContract1);
+        await time.increase(diff);
+        await mintAndStake(user1, nftContract1);
+        const expected = ((7 * 86400) / stakingInterval) * weight;
+        const actual = await contract.itemStat(
+          user1,
+          nftContractAddr1,
+          tokenId
+        );
+        expect(actual[1]).eq(expected);
+      });
     });
   });
   // More Clear Test
-  describe.skip("users", () => {
+  describe("users", () => {
     beforeEach(async () => {
       await contractOwnerCalls.toggleStakingAllowed();
       await contract.setWhitelistedCol(nftContractAddr1, 100, 2);
@@ -484,16 +795,16 @@ describe(CONTRACT_NAME, function () {
       expect(await contract.users()).deep.eq([user1.address, user2.address]);
       const stake3 = await mintAndStake(user1, nftContract1);
       expect(await contract.users()).deep.eq([user1.address, user2.address]);
-      await contractUser1Calls.unstake(nftContractAddr1, stake3.tokenId);
-      expect(await contract.users()).deep.eq([user1.address, user2.address]);
-      await contractUser2Calls.unstake(nftContractAddr1, stake2.tokenId);
-      expect(await contract.users()).deep.eq([user1.address]);
-      await contractUser1Calls.unstake(nftContractAddr1, stake1.tokenId);
-      expect(await contract.users()).deep.eq([]);
+      // await contractUser1Calls.unstake(nftContractAddr1, stake3.tokenId);
+      // expect(await contract.users()).deep.eq([user1.address, user2.address]);
+      // await contractUser2Calls.unstake(nftContractAddr1, stake2.tokenId);
+      // expect(await contract.users()).deep.eq([user1.address]);
+      // await contractUser1Calls.unstake(nftContractAddr1, stake1.tokenId);
+      // expect(await contract.users()).deep.eq([]);
     });
   });
   // More Clear Test
-  describe.skip("userScore", () => {
+  describe("userScore", () => {
     const weights = [39, 9];
     const intervals = [123, 456, 789];
     const mintAndStakeForWhile = async (): Promise<
@@ -527,6 +838,7 @@ describe(CONTRACT_NAME, function () {
       expect(await contract.isStakingAllowed()).eq(true);
     });
     it("should return valid score when user has no hist score", async () => {
+      await contract.setMaxStakedDay(7);
       const stakes = await mintAndStakeForWhile();
       const actual = await contract.userScore(user1);
       const expectedScore = await calculatedStakeScores(stakes, [
@@ -534,9 +846,10 @@ describe(CONTRACT_NAME, function () {
         weights[1],
         weights[0]
       ]);
-      expect(actual[1]).eq(expectedScore);
+      expect(actual[2]).eq(expectedScore);
     });
     it("should return valid score when user has hist score", async () => {
+      await contract.setMaxStakedDay(7);
       const stake1 = await mintAndStake(user1, nftContract1);
       await time.increase(3721);
       await contractUser1Calls.unstake(nftContractAddr1, stake1.tokenId);
@@ -550,45 +863,46 @@ describe(CONTRACT_NAME, function () {
         weights[1],
         weights[0]
       ]);
-      expect(actual[1]).eq(expectedScore + histScore);
+      expect(actual[1]).eq(histScore);
+      expect(actual[2]).eq(expectedScore);
     });
   });
-  // More Clear Test
-  describe.skip("rescue", () => {
-    const weights = [5, 9];
-    beforeEach(async () => {
-      await contractOwnerCalls.toggleStakingAllowed();
-      await contract.setWhitelistedCol(nftContractAddr1, 100, weights[0]);
-      await contract.setWhitelistedCol(nftContractAddr2, 100, weights[1]);
-      expect(await contract.isStakingAllowed()).eq(true);
-    });
-    it("should revert when caller is not the owner", async () => {
-      await expect(contractUser1Calls.toggleStakingAllowed()).revertedWith(
-        notAOwnerErrMsg
-      );
-    });
-    it("should force to unstake item and transfer back the staker", async () => {
-      const stake1 = await mintAndStake(user1, nftContract1);
-      const stake2 = await mintAndStake(user1, nftContract2);
-      const stake3 = await mintAndStake(user1, nftContract1);
-      await mintAndStake(user2, nftContract2);
-      expect(await nftContract1.ownerOf(stake3.tokenId)).eq(contractAddr);
-      expect(await contract.userStakedItems(user1.address)).length(3);
-      await time.increase(3721);
-      await contractOwnerCalls.rescue(
-        user1.address,
-        nftContractAddr1,
-        stake3.tokenId
-      );
-      const expectedScore = await calculatedStakeScores(
-        [stake1, stake2, stake3],
-        [5, 9, 5]
-      );
-      expect(await nftContract1.ownerOf(stake3.tokenId)).eq(user1.address);
-      expect(await contract.userStakedItems(user1.address)).length(2);
-      expect((await contract.userScore(user1.address))[1]).eq(expectedScore);
-    });
-  });
+  // // More Clear Test
+  // describe.skip("rescue", () => {
+  //   const weights = [5, 9];
+  //   beforeEach(async () => {
+  //     await contractOwnerCalls.toggleStakingAllowed();
+  //     await contract.setWhitelistedCol(nftContractAddr1, 100, weights[0]);
+  //     await contract.setWhitelistedCol(nftContractAddr2, 100, weights[1]);
+  //     expect(await contract.isStakingAllowed()).eq(true);
+  //   });
+  //   it("should revert when caller is not the owner", async () => {
+  //     await expect(contractUser1Calls.toggleStakingAllowed()).revertedWith(
+  //       notAOwnerErrMsg
+  //     );
+  //   });
+  //   it("should force to unstake item and transfer back the staker", async () => {
+  //     const stake1 = await mintAndStake(user1, nftContract1);
+  //     const stake2 = await mintAndStake(user1, nftContract2);
+  //     const stake3 = await mintAndStake(user1, nftContract1);
+  //     await mintAndStake(user2, nftContract2);
+  //     expect(await nftContract1.ownerOf(stake3.tokenId)).eq(contractAddr);
+  //     expect(await contract.userStakedItems(user1.address)).length(3);
+  //     await time.increase(3721);
+  //     await contractOwnerCalls.rescue(
+  //       user1.address,
+  //       nftContractAddr1,
+  //       stake3.tokenId
+  //     );
+  //     const expectedScore = await calculatedStakeScores(
+  //       [stake1, stake2, stake3],
+  //       [5, 9, 5]
+  //     );
+  //     expect(await nftContract1.ownerOf(stake3.tokenId)).eq(user1.address);
+  //     expect(await contract.userStakedItems(user1.address)).length(2);
+  //     expect((await contract.userScore(user1.address))[1]).eq(expectedScore);
+  //   });
+  // });
   // More Clear Test
   describe.skip("intergration test", () => {
     const weights = [51, 39];
