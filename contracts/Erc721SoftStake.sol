@@ -94,9 +94,10 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
     uint256 timestamp
   );
 
-  constructor(uint32 interval_) {
+  constructor(uint32 interval_, uint16 maxStakedDay_) {
     isStakingAllowed = false;
-    stakingInterval = interval_;
+    setStakeInterval(interval_);
+    setMaxStakedDay(maxStakedDay_);
   }
 
   modifier stakingOpened() {
@@ -113,17 +114,17 @@ contract Erc721SoftStake is Ownable, ReentrancyGuard, ERC721Holder {
     }
   }
 
-  function setOperator(address addr) external onlyOwner {
+  function setOperator(address addr) public onlyOwner {
     operator = addr;
     emit OperatorUpdated(addr);
   }
 
-  function setMaxStakedDay(uint16 newValue) external onlyOwner {
+  function setMaxStakedDay(uint16 newValue) public onlyOwner {
     maxStakedDay = newValue;
     emit SetMaxStakedDay(newValue);
   }
 
-  function setStakeInterval(uint32 newValue) external onlyOwner {
+  function setStakeInterval(uint32 newValue) public onlyOwner {
     stakingInterval = newValue;
     emit SetStakeInterval(newValue);
   }

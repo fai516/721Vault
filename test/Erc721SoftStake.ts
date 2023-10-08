@@ -19,6 +19,7 @@ interface IMintAndStakeReturned {
 }
 
 describe.only(CONTRACT_NAME, function () {
+  const maxDay = 1;
   const stakingInterval = 5;
   let contract: ContractType;
   let contractAddr: string;
@@ -44,7 +45,8 @@ describe.only(CONTRACT_NAME, function () {
   beforeEach(async () => {
     const ctx = await deployContract<ContractType>(
       CONTRACT_NAME,
-      stakingInterval
+      stakingInterval,
+      maxDay
     );
     contract = ctx.contract;
     contractAddr = await contract.getAddress();
